@@ -25,14 +25,11 @@ import com.google.gson.Gson
 import com.jakewharton.retrofit2.adapter.kotlin.coroutines.experimental.CoroutineCallAdapterFactory
 import io.plaidapp.base.BuildConfig
 import io.plaidapp.base.data.api.DenvelopingConverter
-import io.plaidapp.base.designernews.data.api.DesignerNewsCommentsRepository
-import io.plaidapp.base.designernews.data.api.DesignerNewsRepository
 import io.plaidapp.base.designernews.data.api.ClientAuthInterceptor
 import io.plaidapp.base.designernews.data.api.DesignerNewsAuthTokenLocalDataSource
 import io.plaidapp.base.designernews.data.api.DesignerNewsService
 import io.plaidapp.base.designernews.data.api.comments.DesignerNewsCommentsRemoteDataSource
 import io.plaidapp.base.designernews.data.api.comments.DesignerNewsCommentsRepository
-import io.plaidapp.base.designernews.login.data.DesignerNewsLoginLocalStorage
 import io.plaidapp.base.designernews.login.data.DesignerNewsLoginLocalDataSource
 import io.plaidapp.base.designernews.login.data.DesignerNewsLoginRemoteDataSource
 import io.plaidapp.base.designernews.login.data.DesignerNewsLoginRepository
@@ -74,12 +71,6 @@ fun provideDesignerNewsLoginRepository(context: Context): DesignerNewsLoginRepos
 }
 
 fun provideDesignerNewsLoginRemoteDataSource(context: Context): DesignerNewsLoginRemoteDataSource {
-    // using a shared instance of the token holder between the remote data source and the service
-    // so the remote data source can update the token without having to recreate the service
-    // and at run time, having the service use the latest token
-    // TODO right now, the token is held by the DesignerNewsLoginDataSource and updated via the
-    // login repository. Preferably, only the remote data source should know how to get and store
-    // the auth token
     val tokenHolder = provideDesignerNewsAuthTokenLocalDataSource(context)
     return DesignerNewsLoginRemoteDataSource(tokenHolder, provideDesignerNewsService(tokenHolder))
 }
@@ -93,7 +84,12 @@ private fun provideDesignerNewsAuthTokenLocalDataSource(
                     DesignerNewsAuthTokenLocalDataSource.DESIGNER_NEWS_AUTH_PREF))
 }
 
-fun provideDesignerNewsService(
+fun provideDesignerNewsService(context: Context): DesignerNewsService {
+    val tokenHolder = provideDesignerNewsAuthTokenLocalDataSource(context)
+    return provideDesignerNewsService(tokenHolder)
+}
+
+private fun provideDesignerNewsService(
         authTokenDataSource: DesignerNewsAuthTokenLocalDataSource
 ): DesignerNewsService {
     val client = OkHttpClient.Builder()
@@ -120,9 +116,12 @@ fun provideDesignerNewsRepository(service: DesignerNewsService): io.plaidapp.bas
     return io.plaidapp.base.designernews.data.api.DesignerNewsRepository.getInstance(service)
 }
 
-fun provideDesignerNewsCommentsRepository() =
-        DesignerNewsCommentsRepository.getInstance(provideDesignerNewsCommentsRemoteDataSource())
+fun provideDesignerNewsCommentsRepository(context: Context): DesignerNewsCommentsRepository {
+    val service = provideDesignerNewsService(context)
+    return DesignerNewsCommentsRepository.getInstance(
+            provideDesignerNewsCommentsRemoteDataSource(service))
+}
 
 
-fun provideDesignerNewsCommentsRemoteDataSource() =
-        DesignerNewsCommentsRemoteDataSource.getInstance(provideDesignerNewsService())
+fun provideDesignerNewsCommentsRemoteDataSource(service: DesignerNewsService) =
+        DesignerNewsCommentsRemoteDataSource.getInstance(service)
